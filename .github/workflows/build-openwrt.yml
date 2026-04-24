@@ -1,4 +1,4 @@
-name: Build OpenWrt with sing-box v1.13.11
+name: Build OpenWrt + sing-box (Release自动发布)
 on:
   workflow_dispatch:
     inputs:
@@ -11,6 +11,11 @@ on:
           - x86_64
           - armvirt-64
           - qualcommax_ipq807x
+
+# 必须开启权限，才能创建Release
+permissions:
+  contents: write
+  actions: read
 
 jobs:
   build:
@@ -29,20 +34,19 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: 集成 sing-box 预编译二进制包
+      - name: 集成 sing-box 预编译二进制
         run: |
-          chmod +x ./scripts/prepare-singbox.sh
+          mkdir -p scripts
+          curl -fsSL https://raw.githubusercontent.com/yourrepo/prepare-singbox.sh -o scripts/prepare-singbox.sh
+          chmod +x scripts/prepare-singbox.sh
           cd openwrt
           ../scripts/prepare-singbox.sh ${{ github.event.inputs.target }}
 
       - name: 生成编译配置
         run: |
           cd openwrt
-          # 启用架构
           echo "CONFIG_TARGET_${{ github.event.inputs.target }}=y" > .config
-          # 启用 sing-box
           echo "CONFIG_PACKAGE_sing-box=y" >> .config
-          # 加载默认配置
           make defconfig
 
       - name: 下载依赖
@@ -55,15 +59,29 @@ jobs:
           cd openwrt
           make -j$(nproc) V=s
 
-      - name: 打包固件
+      - name: 整理固件文件
         run: |
           mkdir -p firmware
           cp openwrt/bin/targets/*/*/*.bin firmware/ 2>/dev/null || true
           cp openwrt/bin/targets/*/*/*.img.gz firmware/ 2>/dev/null || true
           cp openwrt/bin/targets/*/*/*.tar.zst firmware/ 2>/dev/null || true
+          # 获取版本/日期信息
+          echo "OPENWRT_VER=25.12.2" >> $GITHUB_ENV
+          echo "SINGBOX_VER=1.13.11" >> $GITHUB_ENV
+          echo "BUILD_DATE=$(date +%Y%m%d)" >> $GITHUB_ENV
+          echo "ARCH=${{ github.event.inputs.target }}" >> $GITHUB_ENV
 
-      - name: 上传固件
-        uses: actions/upload-artifact@v4
+      - name: 创建 Release 并上传固件
+        uses: softprops/action-gh-release@v2
         with:
-          name: openwrt-${{ github.event.inputs.target }}-sing-box
-          path: firmware/
+          name: OpenWrt ${{ env.OPENWRT_VER }} + sing-box ${{ env.SINGBOX_VER }} (${{ env.ARCH }})
+          tag_name: openwrt-${{ env.ARCH }}-${{ env.BUILD_DATE }}
+          files: firmware/*
+          body: |
+            ✅ 自动编译固件
+            📌 OpenWrt版本: 25.12.2
+            📌 sing-box版本: v1.13.11
+            📌 架构: ${{ github.event.inputs.target }}
+            📌 编译日期: ${{ env.BUILD_DATE }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
