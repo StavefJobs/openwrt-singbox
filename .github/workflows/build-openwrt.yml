@@ -37,7 +37,7 @@ jobs:
       - name: 集成 sing-box 预编译二进制
         run: |
           mkdir -p scripts
-          curl -fsSL https://raw.githubusercontent.com/yourrepo/prepare-singbox.sh -o scripts/prepare-singbox.sh
+          cp -r scripts/prepare-singbox.sh scripts/
           chmod +x scripts/prepare-singbox.sh
           cd openwrt
           ../scripts/prepare-singbox.sh ${{ github.event.inputs.target }}
